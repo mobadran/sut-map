@@ -1,0 +1,16 @@
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;color:#0f172a;background:#f1f5f9}
+.app{display:flex;height:100vh}aside{width:340px;padding:16px;overflow:auto;background:#fff;border-right:1px solid #e2e8f0}
+main{flex:1;position:relative}h1{font-size:20px;margin:0 0 8px}h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin:18px 0 6px}
+input,select{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px}
+button{font:inherit;cursor:pointer}.result{display:flex;justify-content:space-between;width:100%;margin-top:6px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+.result span{font-size:12px;color:#64748b}.result.on{border-color:#f97316;background:#fff7ed}.link{background:none;border:0;color:#2563eb;margin-top:6px;padding:0}
+.muted{color:#64748b;font-size:13px;margin:6px 0}.alert{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;font-size:14px}
+.steps{padding-left:20px;margin:6px 0;font-size:14px;line-height:1.5}.gate{display:block;width:100%;margin-bottom:6px;padding:8px;border-radius:10px;border:1px solid}
+.gate.open{background:#f0fdf4;border-color:#86efac;color:#166534}.gate.closed{background:#fef2f2;border-color:#fca5a5;color:#991b1b}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:13px}.legend span{display:flex;align-items:center;gap:6px}.legend i{width:22px;height:5px;border-radius:3px;margin:0 3px}
+.mapbox{position:absolute;inset:0;overflow:hidden;background:#e2e8f0;cursor:grab;touch-action:none;user-select:none}.mapbox:active{cursor:grabbing}
+.controls{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:6px}.controls button{width:40px;height:40px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-size:20px;box-shadow:0 2px 6px #0002}
+.hint{position:absolute;left:16px;bottom:12px;background:#fffc;padding:4px 10px;border-radius:8px;font-size:12px;color:#475569}
+.lbl{font-size:16px;font-weight:800}.pulse{animation:p 1.4s infinite;transform-box:fill-box;transform-origin:center}@keyframes p{50%{opacity:.3;transform:scale(1.25)}}
+.flow{stroke-dasharray:1 0}
+@media(max-width:800px){.app{flex-direction:column-reverse}aside{width:100%;height:45vh}main{height:55vh;flex:none}}
