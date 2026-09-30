@@ -49,19 +49,9 @@ export default function App() {
     }
   };
 
-  const clearStart = () => {
-    setStartPin(null);
-    setPinMode("start");
-  };
-  const clearDest = () => {
-    setDestPin(null);
-    if (startPin) setPinMode("dest");
-    else setPinMode("start");
-  };
   const clearAll = () => {
     setStartPin(null);
     setDestPin(null);
-    setPinMode("start");
   };
 
   return (

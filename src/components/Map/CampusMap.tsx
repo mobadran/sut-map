@@ -35,7 +35,15 @@ type P = {
 
 export default function CampusMap(p: P) {
   const box = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const drag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{
+    pointerIds: [number, number];
+    distance: number;
+    scale: number;
+    mapX: number;
+    mapY: number;
+  } | null>(null);
   const [v, setV] = useState({ s: 1, x: 0, y: 0 });
 
   const fit = useCallback(() => {
@@ -102,13 +110,68 @@ export default function CampusMap(p: P) {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    drag.current = { x: e.clientX, y: e.clientY, moved: false };
+    if (pinch.current) return;
+    drag.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
+  const beginPinch = (firstId: number, secondId: number) => {
+    const first = pointers.current.get(firstId);
+    const second = pointers.current.get(secondId);
+    if (!first || !second) return;
+    const bounds = box.current!.getBoundingClientRect();
+    const midpointX = (first.x + second.x) / 2 - bounds.left;
+    const midpointY = (first.y + second.y) / 2 - bounds.top;
+    const pinchDistance = Math.hypot(second.x - first.x, second.y - first.y);
+    if (!pinchDistance) return;
+    pinch.current = {
+      pointerIds: [firstId, secondId],
+      distance: pinchDistance,
+      scale: v.s,
+      mapX: (midpointX - v.x) / v.s,
+      mapY: (midpointY - v.y) / v.s,
+    };
+    drag.current = null;
+    try {
+      box.current!.setPointerCapture(firstId);
+      box.current!.setPointerCapture(secondId);
+    } catch {
+      // Pointer capture may be unavailable for a pointer already released by the browser.
+    }
+  };
+
+  const handlePointerDownCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size !== 2 || pinch.current) return;
+    const [firstId, secondId] = [...pointers.current.keys()];
+    beginPinch(firstId, secondId);
+  };
+
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointers.current.has(e.pointerId)) {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    const gesture = pinch.current;
+    if (gesture) {
+      const first = pointers.current.get(gesture.pointerIds[0]);
+      const second = pointers.current.get(gesture.pointerIds[1]);
+      if (!first || !second) return;
+      const bounds = box.current!.getBoundingClientRect();
+      const midpointX = (first.x + second.x) / 2 - bounds.left;
+      const midpointY = (first.y + second.y) / 2 - bounds.top;
+      const currentDistance = Math.hypot(second.x - first.x, second.y - first.y);
+      const scale = Math.max(0.15, Math.min(6, gesture.scale * currentDistance / gesture.distance));
+      setV({
+        s: scale,
+        x: midpointX - gesture.mapX * scale,
+        y: midpointY - gesture.mapY * scale,
+      });
+      return;
+    }
+
     const d = drag.current;
-    if (!d) return;
+    if (!d || d.pointerId !== e.pointerId) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     if (Math.hypot(dx, dy) > 4) d.moved = true;
     setV((c) => ({
@@ -116,14 +179,29 @@ export default function CampusMap(p: P) {
       x: c.x + e.clientX - d.x,
       y: c.y + e.clientY - d.y,
     }));
-    drag.current = { x: e.clientX, y: e.clientY, moved: d.moved };
+    drag.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, moved: d.moved };
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+  const finishPointer = (e: React.PointerEvent<HTMLDivElement>, allowClick: boolean) => {
+    const wasPinching = Boolean(pinch.current);
+    pointers.current.delete(e.pointerId);
+    if (wasPinching) {
+      pinch.current = null;
+      drag.current = null;
+      if (pointers.current.size >= 2) {
+        const [firstId, secondId] = [...pointers.current.keys()];
+        beginPinch(firstId, secondId);
+      } else if (pointers.current.size === 1) {
+        const [pointerId, point] = [...pointers.current.entries()][0];
+        drag.current = { pointerId, x: point.x, y: point.y, moved: true };
+      }
+      return;
+    }
+
     const d = drag.current;
-    drag.current = null;
+    if (d?.pointerId === e.pointerId) drag.current = null;
     // Only treat as a click if the pointer didn't move significantly AND we have a pin mode
-    if (!d || d.moved || !p.pinMode) return;
+    if (!allowClick || !d || d.pointerId !== e.pointerId || d.moved || !p.pinMode) return;
 
     const pt = toNorm(e.clientX, e.clientY);
 
@@ -158,6 +236,9 @@ export default function CampusMap(p: P) {
     }
   };
 
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => finishPointer(e, true);
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => finishPointer(e, false);
+
   const startNodeId = p.startPin?.nodeId;
   const destNodeId = p.destPin?.nodeId;
 
@@ -165,9 +246,11 @@ export default function CampusMap(p: P) {
     <div
       className={`mapbox${p.pinMode ? ` pin-mode-${p.pinMode}` : ""}`}
       ref={box}
+      onPointerDownCapture={handlePointerDownCapture}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
     >
       <div
         style={{
@@ -256,8 +339,6 @@ export default function CampusMap(p: P) {
         </svg>
       </div>
       <MapControls
-        onZoomIn={() => zoomCenter(1.3)}
-        onZoomOut={() => zoomCenter(1 / 1.3)}
         onReset={fit}
       />
       {p.pinMode && (

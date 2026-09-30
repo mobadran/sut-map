@@ -1,6 +1,19 @@
 * {
   box-sizing: border-box;
 }
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
   font-family: Inter, system-ui, sans-serif;
@@ -10,6 +23,7 @@ body {
 .app {
   display: flex;
   height: 100vh;
+  height: 100dvh;
 }
 aside {
   width: 340px;
@@ -147,7 +161,7 @@ button {
 .controls {
   position: absolute;
   right: 16px;
-  top: 16px;
+  bottom: 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
