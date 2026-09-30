@@ -16,7 +16,9 @@ export default function App() {
   const [startPin, setStartPin] = useState<MapPin | null>(null);
   const [destPin, setDestPin] = useState<MapPin | null>(null);
   const [pinMode, setPinMode] = useState<PinMode>("start");
-  const [locateTarget, setLocateTarget] = useState<MapSearchTarget | null>(null);
+  const [locateTarget, setLocateTarget] = useState<MapSearchTarget | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!locateTarget) return;
@@ -65,10 +67,7 @@ export default function App() {
   return (
     <div className="app">
       <aside>
-        <h1>🧭 SUT Navigator</h1>
-
         <section>
-          <h3>Find a place</h3>
           <RoomSearch
             rooms={rooms}
             nodes={nodes}
@@ -77,53 +76,36 @@ export default function App() {
           />
         </section>
 
-        <section>
-          <h3>Start Point</h3>
+        <section style={{ display: "flex", gap: 8 }}>
           <div className="pin-panel">
             <button
               className={`pin-btn start${pinMode === "start" ? " active" : ""}`}
               onClick={() => setPinMode(pinMode === "start" ? null : "start")}
             >
-              {pinMode === "start" ? "🎯 Picking start…" : "🚩 Set Start"}
-            </button>
-            {startPin && (
-              <div className="pin-info">
-                <span>{startPin.label ?? "Custom point"}</span>
-                <button
-                  className="link"
-                  onClick={clearStart}
-                  title="Clear start"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
 
-        <section>
-          <h3>Destination</h3>
+              {pinMode === "start" ? (
+                "🎯 Picking start…"
+              ) : startPin ? (
+                <span>🚩 Start <span style={{ fontWeight: "bold", fontStyle: "italic" }}>{startPin.label ?? "Custom"}</span></span>
+              ) : (
+                "📍 Set Start"
+              )}
+            </button>
+          </div>
           <div className="pin-panel">
             <button
               className={`pin-btn dest${pinMode === "dest" ? " active" : ""}`}
               onClick={() => setPinMode(pinMode === "dest" ? null : "dest")}
             >
-              {pinMode === "dest"
-                ? "🎯 Picking destination…"
-                : "📍 Set Destination"}
+              {pinMode === "dest" ? (
+                "🎯 Picking destination…"
+              ) : destPin ? (
+                <span>📍 Destination <span style={{ fontWeight: "bold", fontStyle: "italic" }}>{destPin.label ?? "Custom"}</span></span>
+              ) : (
+                "📍 Set Destination"
+              )}
+
             </button>
-            {destPin && (
-              <div className="pin-info">
-                <span>{destPin.label ?? "Custom point"}</span>
-                <button
-                  className="link"
-                  onClick={clearDest}
-                  title="Clear destination"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
           </div>
         </section>
 

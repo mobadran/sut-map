@@ -152,9 +152,9 @@ export default function CampusMap(p: P) {
         label: bestRoom.name,
       });
     } else if (bestNode) {
-      p.onMapClick({ point: bestNode.position, nodeId: bestNode.id, label: `Node ${bestNode.id} (${bestNode.type})` });
+      p.onMapClick({ point: bestNode.position, nodeId: bestNode.id, label: `${bestNode.type}` });
     } else {
-      p.onMapClick({ point: pt, label: "Custom point" });
+      p.onMapClick({ point: pt, label: "Custom" });
     }
   };
 
@@ -210,7 +210,7 @@ export default function CampusMap(p: P) {
             onNodeClick={(nodeId) => {
               if (!p.pinMode) return;
               const n = p.nodes.find((x) => x.id === nodeId)!;
-              p.onMapClick({ point: n.position, nodeId, label: `Node ${nodeId} (${n.type})` });
+              p.onMapClick({ point: n.position, nodeId, label: `${n.type}` });
             }}
           />
           <MapRooms
