@@ -144,7 +144,13 @@ export default function CampusMap(p: P) {
     }
 
     if (bestRoom && bestRoomDist <= bestNodeDist) {
-      p.onMapClick({ point: { x: bestRoom.x, y: bestRoom.y }, roomName: bestRoom.name, label: bestRoom.name });
+      p.onMapClick({
+        point: { x: bestRoom.x, y: bestRoom.y },
+        roomId: bestRoom.id,
+        roomName: bestRoom.name,
+        entranceEdgeId: bestRoom.entranceEdgeId,
+        label: bestRoom.name,
+      });
     } else if (bestNode) {
       p.onMapClick({ point: bestNode.position, nodeId: bestNode.id, label: `Node ${bestNode.id} (${bestNode.type})` });
     } else {
@@ -209,12 +215,17 @@ export default function CampusMap(p: P) {
           />
           <MapRooms
             rooms={p.rooms}
-            startRoomName={p.startPin?.roomName ?? null}
-            selectedName={p.destPin?.roomName ?? null}
-            onSelect={(name) => {
+            startRoomId={p.startPin?.roomId ?? null}
+            selectedRoomId={p.destPin?.roomId ?? null}
+            onSelect={(room) => {
               if (!p.pinMode) return;
-              const room = p.rooms.find((r) => r.name === name)!;
-              p.onMapClick({ point: { x: room.x, y: room.y }, roomName: room.name, label: room.name });
+              p.onMapClick({
+                point: { x: room.x, y: room.y },
+                roomId: room.id,
+                roomName: room.name,
+                entranceEdgeId: room.entranceEdgeId,
+                label: room.name,
+              });
             }}
           />
           {p.locateTarget && (

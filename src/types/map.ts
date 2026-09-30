@@ -32,7 +32,9 @@ export interface MapSearchTarget {
 export interface MapPin {
   point: Point;       // normalized position on the map
   nodeId?: string;    // if snapped to a predefined nav node
+  roomId?: string;    // identifies one specific room entrance
   roomName?: string;  // if snapped to a room
+  entranceEdgeId?: string;
   label?: string;     // display label shown in the sidebar
 }
 

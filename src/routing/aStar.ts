@@ -114,8 +114,12 @@ export function planRouteBetweenPins(
   startPin: MapPin,
   destPin: MapPin
 ): Route | null {
-  const sEdge = closestActiveEdge(startPin.point, nodes, edges);
-  const dEdge = closestActiveEdge(destPin.point, nodes, edges);
+  const entranceEdge = (pin: MapPin) =>
+    pin.entranceEdgeId
+      ? edges.find((edge) => edge.id === pin.entranceEdgeId && isActive(edge))
+      : undefined;
+  const sEdge = entranceEdge(startPin) ?? closestActiveEdge(startPin.point, nodes, edges);
+  const dEdge = entranceEdge(destPin) ?? closestActiveEdge(destPin.point, nodes, edges);
   if (!sEdge || !dEdge) return null;
 
   const sPt = closestPointOnEdge(startPin.point, sEdge, nodes);

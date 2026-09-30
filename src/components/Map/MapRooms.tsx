@@ -3,15 +3,15 @@ import { W, H } from "./CampusMap";
 
 type P = {
   rooms: Room[];
-  startRoomName: string | null;
-  selectedName: string | null;
-  onSelect: (name: string) => void;
+  startRoomId: string | null;
+  selectedRoomId: string | null;
+  onSelect: (room: Room) => void;
 };
 
 export default function MapRooms({
   rooms,
-  startRoomName,
-  selectedName,
+  startRoomId,
+  selectedRoomId,
   onSelect,
 }: P) {
   return (
@@ -19,8 +19,8 @@ export default function MapRooms({
       {rooms.map((r) => {
         const x = r.x * W,
           y = r.y * H;
-        const isStart = r.name.toLowerCase() === startRoomName?.toLowerCase();
-        const isDest = r.name.toLowerCase() === selectedName?.toLowerCase();
+        const isStart = r.id === startRoomId;
+        const isDest = r.id === selectedRoomId;
 
         let fill = "#fff";
         let stroke = "#334155";
@@ -41,7 +41,7 @@ export default function MapRooms({
             key={r.id}
             style={{ cursor: "pointer" }}
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => onSelect(r.name)}
+            onClick={() => onSelect(r)}
           >
             <rect
               x={x - 34}

@@ -14,23 +14,21 @@ export default function RoomSearch({ rooms, nodes, target, onLocate }: P) {
   const [q, setQ] = useState("");
 
   const items = useMemo(() => {
-    const roomGroups = new Map<string, Room[]>();
-    rooms.forEach((room) => {
-      const group = roomGroups.get(room.name) ?? [];
-      group.push(room);
-      roomGroups.set(room.name, group);
+    const roomCounts = new Map<string, number>();
+    rooms.forEach((room) => roomCounts.set(room.name, (roomCounts.get(room.name) ?? 0) + 1));
+    const roomIndexes = new Map<string, number>();
+    const roomItems: SearchItem[] = rooms.map((room) => {
+      const index = (roomIndexes.get(room.name) ?? 0) + 1;
+      roomIndexes.set(room.name, index);
+      const count = roomCounts.get(room.name) ?? 1;
+      return {
+        id: `room:${room.id}`,
+        label: room.name,
+        point: { x: room.x, y: room.y },
+        detail: count > 1 ? `Room · Entrance ${index}` : "Room",
+        searchText: room.name.toLowerCase(),
+      };
     });
-
-    const roomItems: SearchItem[] = [...roomGroups].map(([name, group]) => ({
-      id: `room:${name}`,
-      label: name,
-      point: {
-        x: group.reduce((sum, room) => sum + room.x, 0) / group.length,
-        y: group.reduce((sum, room) => sum + room.y, 0) / group.length,
-      },
-      detail: group.length > 1 ? `Room · ${group.length} map locations` : "Room",
-      searchText: name.toLowerCase(),
-    }));
     const nodeItems: SearchItem[] = nodes.map((node) => {
       const kind = node.type === "stairs" ? "Staircase" : node.type;
       return {
