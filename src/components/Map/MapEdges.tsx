@@ -1,7 +1,7 @@
 import type { Edge, NavNode } from "../../types/map";
 import { W, H } from "./CampusMap";
 
-export default function MapEdges({ edges, nodes }: { edges: Edge[]; nodes: NavNode[] }) {
+export default function MapEdges({ edges, nodes, primaryColor }: { edges: Edge[]; nodes: NavNode[]; primaryColor: string }) {
   const pos = (id: string) => nodes.find((n) => n.id === id)!.position;
   return (
     <g>
@@ -16,7 +16,7 @@ export default function MapEdges({ edges, nodes }: { edges: Edge[]; nodes: NavNo
               x1={x1} y1={y1} x2={x2} y2={y2}
               strokeWidth={e.isGate ? 7 : 5}
               strokeLinecap="round"
-              stroke={closed ? "#dc2626" : e.isGate ? "#16a34a" : "#64748b"}
+              stroke={closed ? "#dc2626" : e.isGate ? "#16a34a" : primaryColor}
               strokeDasharray={e.isGate ? "14 8" : undefined}
               opacity={closed ? 0.6 : 0.9}
             />

@@ -1,4 +1,4 @@
-import type { Edge, MapPin, NavNode, Point, Route } from "../types/map";
+import type { Edge, FloorId, MapPin, NavNode, Point, Route } from "../types/map";
 import { closestPointOnSegment, distance } from "./geometry";
 
 export const isActive = (e: Edge) => !e.isGate || e.isOpen === true;
@@ -7,10 +7,16 @@ export function closestPointOnEdge(p: Point, e: Edge, nodes: NavNode[]): Point {
   const a = nodes.find((n) => n.id === e.from)!.position, b = nodes.find((n) => n.id === e.to)!.position;
   return closestPointOnSegment(p, a, b);
 }
-export function closestActiveEdge(p: Point, nodes: NavNode[], edges: Edge[]): Edge | undefined {
+export function closestActiveEdge(
+  p: Point,
+  nodes: NavNode[],
+  edges: Edge[],
+  floorId?: FloorId,
+): Edge | undefined {
   let best: Edge | undefined, bd = Infinity;
   for (const e of edges) {
-    if (!isActive(e)) continue;
+    if (!isActive(e) || e.transition) continue;
+    if (floorId && ![e.from, e.to].some((id) => nodes.find((node) => node.id === id)?.floorId === floorId)) continue;
     const d = distance(p, closestPointOnEdge(p, e, nodes));
     if (d < bd) { bd = d; best = e; }
   }
@@ -33,9 +39,10 @@ export function findRouteBetweenPoints(
   pos.set(DEST, destPoint);
 
   const adj = new Map<string, { to: string; edgeId: string; cost: number }[]>();
+  const edgeCosts = new Map(edges.map((edge) => [edge.id, edge.cost]));
   const link = (a: string, b: string, edgeId: string) => {
     if (!adj.has(a)) adj.set(a, []);
-    adj.get(a)!.push({ to: b, edgeId, cost: distance(pos.get(a)!, pos.get(b)!) });
+    adj.get(a)!.push({ to: b, edgeId, cost: edgeCosts.get(edgeId) ?? distance(pos.get(a)!, pos.get(b)!) });
   };
 
   for (const e of edges) {
@@ -64,7 +71,8 @@ export function findRouteBetweenPoints(
   const prev = new Map<string, { id: string; edgeId: string }>();
   const open = new Set([START]);
   const closed = new Set<string>();
-  const h = (id: string) => distance(pos.get(id)!, destPoint);
+  const hasFloorTransitions = edges.some((edge) => edge.transition);
+  const h = (id: string) => hasFloorTransitions ? 0 : distance(pos.get(id)!, destPoint);
 
   while (open.size) {
     let cur = "", bf = Infinity;
@@ -114,12 +122,14 @@ export function planRouteBetweenPins(
   startPin: MapPin,
   destPin: MapPin
 ): Route | null {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const entranceEdge = (pin: MapPin) =>
     pin.entranceEdgeId
-      ? edges.find((edge) => edge.id === pin.entranceEdgeId && isActive(edge))
+      ? edges.find((edge) => edge.id === pin.entranceEdgeId && isActive(edge) && !edge.transition && (!pin.floorId ||
+        [edge.from, edge.to].some((id) => nodeById.get(id)?.floorId === pin.floorId)))
       : undefined;
-  const sEdge = entranceEdge(startPin) ?? closestActiveEdge(startPin.point, nodes, edges);
-  const dEdge = entranceEdge(destPin) ?? closestActiveEdge(destPin.point, nodes, edges);
+  const sEdge = entranceEdge(startPin) ?? closestActiveEdge(startPin.point, nodes, edges, startPin.floorId);
+  const dEdge = entranceEdge(destPin) ?? closestActiveEdge(destPin.point, nodes, edges, destPin.floorId);
   if (!sEdge || !dEdge) return null;
 
   const sPt = closestPointOnEdge(startPin.point, sEdge, nodes);
@@ -128,11 +138,21 @@ export function planRouteBetweenPins(
   const res = findRouteBetweenPoints(nodes, edges, sEdge, sPt, dEdge, dPt);
   if (!res) return null;
 
+  const floorOfEdge = (edge: Edge): FloorId =>
+    nodeById.get(edge.from)?.floorId ?? nodeById.get(edge.to)?.floorId ?? "ground";
+  const startFloor = startPin.floorId ?? (startPin.nodeId ? nodeById.get(startPin.nodeId)?.floorId : undefined) ?? floorOfEdge(sEdge);
+  const destFloor = destPin.floorId ?? (destPin.nodeId ? nodeById.get(destPin.nodeId)?.floorId : undefined) ?? floorOfEdge(dEdge);
+
   return {
     startPin,
     destPin,
     startEntrance: sPt,
     entrance: dPt,
+    pointFloors: [
+      startFloor,
+      ...res.nodeIds.map((id) => nodeById.get(id)?.floorId ?? startFloor),
+      destFloor,
+    ],
     ...res,
   };
 }

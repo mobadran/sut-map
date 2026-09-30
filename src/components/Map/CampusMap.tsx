@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Edge, MapPin, MapSearchTarget, NavNode, Room, Route } from "../../types/map";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import type { Edge, FloorId, MapPin, MapSearchTarget, NavNode, Room, Route } from "../../types/map";
+import type { FloorMap } from "../../data/floors";
 import MapEdges from "./MapEdges";
 import MapNodes from "./MapNodes";
 import MapRooms from "./MapRooms";
@@ -17,11 +18,18 @@ const found = import.meta.glob("../../assets/SUTMap.png", {
   import: "default",
 }) as Record<string, string>;
 const mapUrl = Object.values(found)[0];
+const floorFound = import.meta.glob("../../assets/floors/*.{png,jpg,jpeg,webp}", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
 
 /** Threshold in normalized units: if click is within this distance to a node, snap to it. */
 const SNAP_THRESHOLD = 0.045;
 
 type P = {
+  floor: FloorMap;
+  floors: FloorMap[];
   nodes: NavNode[];
   edges: Edge[];
   rooms: Room[];
@@ -30,6 +38,7 @@ type P = {
   destPin: MapPin | null;
   pinMode: "start" | "dest" | null;
   locateTarget: MapSearchTarget | null;
+  onFloorChange: (floorId: FloorId) => void;
   onMapClick: (pin: MapPin) => void;
 };
 
@@ -88,6 +97,10 @@ export default function CampusMap(p: P) {
   }, [fit, zoomAt]);
 
   useEffect(() => {
+    fit();
+  }, [fit, p.floor.id]);
+
+  useEffect(() => {
     if (!p.locateTarget || !box.current) return;
     const { width, height } = box.current.getBoundingClientRect();
     setV((current) => {
@@ -141,6 +154,7 @@ export default function CampusMap(p: P) {
   };
 
   const handlePointerDownCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest(".floor-picker, .controls")) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size !== 2 || pinch.current) return;
     const [firstId, secondId] = [...pointers.current.keys()];
@@ -239,13 +253,26 @@ export default function CampusMap(p: P) {
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => finishPointer(e, true);
   const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => finishPointer(e, false);
 
-  const startNodeId = p.startPin?.nodeId;
-  const destNodeId = p.destPin?.nodeId;
+  const currentFloorId = p.floor.id;
+  const floorNodes = p.nodes.filter((node) => (node.floorId ?? "ground") === currentFloorId);
+  const floorNodeIds = new Set(floorNodes.map((node) => node.id));
+  const floorEdges = p.edges.filter((edge) =>
+    !edge.transition && floorNodeIds.has(edge.from) && floorNodeIds.has(edge.to),
+  );
+  const floorRooms = p.rooms.filter((room) => (room.floorId ?? "ground") === currentFloorId);
+  const pinFloor = (pin: MapPin | null) => pin?.floorId ?? "ground";
+  const startNodeId = pinFloor(p.startPin) === currentFloorId ? p.startPin?.nodeId : undefined;
+  const destNodeId = pinFloor(p.destPin) === currentFloorId ? p.destPin?.nodeId : undefined;
+  const floorImage = Object.entries(floorFound).find(([path]) =>
+    path.split("/").pop()?.startsWith(`${currentFloorId}.`),
+  )?.[1] ?? (currentFloorId === "ground" ? mapUrl : undefined);
+  const mapStyle = { "--floor-primary": p.floor.primaryColor } as CSSProperties;
 
   return (
     <div
       className={`mapbox${p.pinMode ? ` pin-mode-${p.pinMode}` : ""}`}
       ref={box}
+      style={mapStyle}
       onPointerDownCapture={handlePointerDownCapture}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -267,27 +294,35 @@ export default function CampusMap(p: P) {
           height={H}
           style={{ position: "absolute", inset: 0 }}
         >
-          {mapUrl ? (
+          {floorImage ? (
             <image
-              href={mapUrl}
+              href={floorImage}
               width={W}
               height={H}
               preserveAspectRatio="none"
             />
           ) : (
-            <Placeholder nodes={p.nodes} edges={p.edges} />
+            <Placeholder nodes={floorNodes} edges={floorEdges} />
           )}
-          <MapEdges edges={p.edges} nodes={p.nodes} />
-          <RouteOverlay route={p.route} nodes={p.nodes} />
+          <rect width={W} height={H} fill={p.floor.primaryColor} opacity={0.09} pointerEvents="none" />
+          <MapEdges edges={floorEdges} nodes={floorNodes} primaryColor={p.floor.primaryColor} />
+          <RouteOverlay
+            route={p.route}
+            nodes={p.nodes}
+            edges={p.edges}
+            floors={p.floors}
+            floorId={currentFloorId}
+            primaryColor={p.floor.primaryColor}
+          />
           {/* Free-floating pins (not snapped to a node or room) */}
-          {p.startPin && !p.startPin.nodeId && !p.startPin.roomName && (
+          {p.startPin && pinFloor(p.startPin) === currentFloorId && !p.startPin.nodeId && !p.startPin.roomName && (
             <FreePinMarker point={p.startPin.point} color="#10b981" label="START" />
           )}
-          {p.destPin && !p.destPin.nodeId && !p.destPin.roomName && (
+          {p.destPin && pinFloor(p.destPin) === currentFloorId && !p.destPin.nodeId && !p.destPin.roomName && (
             <FreePinMarker point={p.destPin.point} color="#f97316" label="DEST" />
           )}
           <MapNodes
-            nodes={p.nodes}
+            nodes={floorNodes}
             startNodeId={startNodeId}
             destNodeId={destNodeId}
             onNodeClick={(nodeId) => {
@@ -296,22 +331,7 @@ export default function CampusMap(p: P) {
               p.onMapClick({ point: n.position, nodeId, label: `${n.type}` });
             }}
           />
-          <MapRooms
-            rooms={p.rooms}
-            startRoomId={p.startPin?.roomId ?? null}
-            selectedRoomId={p.destPin?.roomId ?? null}
-            onSelect={(room) => {
-              if (!p.pinMode) return;
-              p.onMapClick({
-                point: { x: room.x, y: room.y },
-                roomId: room.id,
-                roomName: room.name,
-                entranceEdgeId: room.entranceEdgeId,
-                label: room.name,
-              });
-            }}
-          />
-          {p.locateTarget && (
+          {p.locateTarget && (p.locateTarget.floorId ?? "ground") === currentFloorId && (
             <g pointerEvents="none">
               <circle
                 cx={p.locateTarget.point.x * W}
@@ -337,17 +357,48 @@ export default function CampusMap(p: P) {
             </g>
           )}
         </svg>
+        <MapRooms
+          rooms={floorRooms}
+          startRoomId={pinFloor(p.startPin) === currentFloorId ? p.startPin?.roomId ?? null : null}
+          selectedRoomId={pinFloor(p.destPin) === currentFloorId ? p.destPin?.roomId ?? null : null}
+          primaryColor={p.floor.primaryColor}
+          onSelect={(room) => {
+            if (!p.pinMode) return;
+            p.onMapClick({
+              point: { x: room.x, y: room.y },
+              roomId: room.id,
+              roomName: room.name,
+              entranceEdgeId: room.entranceEdgeId,
+              label: room.name,
+            });
+          }}
+        />
       </div>
       <MapControls
         onReset={fit}
       />
-      {p.pinMode && (
+      <div className="floor-picker" role="group" aria-label="Choose floor">
+        {p.floors.map((floor) => (
+          <button
+            key={floor.id}
+            type="button"
+            aria-pressed={floor.id === currentFloorId}
+            className={floor.id === currentFloorId ? "active" : ""}
+            style={floor.id === currentFloorId ? { backgroundColor: floor.primaryColor, borderColor: floor.primaryColor } : undefined}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => p.onFloorChange(floor.id)}
+          >
+            {({ Basement: "B", Ground: "G", "Floor 1": "1", "Floor 2": "2", Outside: "Outside" } as const)[floor.label]}
+          </button>
+        ))}
+      </div>
+      {/* {p.pinMode && (
         <div className={`pin-hint pin-hint-${p.pinMode}`}>
           {p.pinMode === "start"
             ? "🚩 Click on the map to set your START point"
             : "📍 Click on the map to set your DESTINATION"}
         </div>
-      )}
+      )} */}
     </div>
   );
 }

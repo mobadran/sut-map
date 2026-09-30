@@ -50,7 +50,21 @@ export function buildDirections(route: Route, navNodes: NavNode[] = [], edges: E
 
     const kind = nodeKind(node);
     const label = nodeLabel(node);
-    if (kind === "stairs" || kind === "elevator" || kind === "door" || kind === "entrance") {
+    const nextEdge = edges.find((edge) => edge.id === route.edgeIds[i + 1]);
+    if (nextEdge?.transition) {
+      const nextFloor = route.pointFloors?.[i + 2];
+      const floorName = nextFloor
+        ? ({ basement: "Basement", ground: "Ground", floor1: "Floor 1", floor2: "Floor 2", outside: "Outside" } as const)[nextFloor]
+        : "the next floor";
+      steps.push(nextEdge.transition.kind === "entrance"
+        ? `Go through the ${nextEdge.transition.label} to ${floorName}.`
+        : `Take the ${nextEdge.transition.label} to ${floorName}.`);
+      steps.push(`Continue on ${floorName}.`);
+      pendingLeft = 0;
+      pendingRight = 0;
+      continue;
+    }
+    if (kind === "stairs" || kind === "door" || kind === "entrance") {
       const place = label ?? (kind === "entrance" ? "the entrance" : `the ${kind}`);
       steps.push(kind === "entrance" || kind === "door"
         ? `Go through ${place}.`
@@ -62,7 +76,7 @@ export function buildDirections(route: Route, navNodes: NavNode[] = [], edges: E
     const incomingEdgeId = route.edgeIds[i];
     const outgoingEdgeId = route.edgeIds[i + 1];
     const branches = activeEdges
-      .filter((edge) => edge.id !== incomingEdgeId && (edge.from === node.id || edge.to === node.id))
+      .filter((edge) => !edge.transition && edge.id !== incomingEdgeId && (edge.from === node.id || edge.to === node.id))
       .map((edge) => {
         const neighborId = edge.from === node.id ? edge.to : edge.from;
         const neighbor = nodes.get(neighborId);

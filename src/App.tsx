@@ -3,12 +3,10 @@ import CampusMap from "./components/Map/CampusMap";
 import { NODE_STYLE, NodeShape } from "./components/Map/MapNodes";
 import NavigationInstructions from "./components/Navigation/NavigationInstructions";
 import RoomSearch from "./components/Search/RoomSearch";
-import { nodes } from "./data/nodes";
-import { initialEdges as edges } from "./data/edges";
-import { rooms } from "./data/rooms";
+import { allEdges, allNodes, allRooms, floorById, floors } from "./data/floors";
 import { planRouteBetweenPins } from "./routing/aStar";
 import { buildDirections } from "./routing/directions";
-import type { MapPin, MapSearchTarget, NodeType } from "./types/map";
+import type { FloorId, MapPin, MapSearchTarget, NodeType } from "./types/map";
 
 type PinMode = "start" | "dest" | null;
 
@@ -16,6 +14,7 @@ export default function App() {
   const [startPin, setStartPin] = useState<MapPin | null>(null);
   const [destPin, setDestPin] = useState<MapPin | null>(null);
   const [pinMode, setPinMode] = useState<PinMode>("start");
+  const [floorId, setFloorId] = useState<FloorId>("ground");
   const [locateTarget, setLocateTarget] = useState<MapSearchTarget | null>(
     null,
   );
@@ -29,24 +28,30 @@ export default function App() {
   const route = useMemo(
     () =>
       startPin && destPin
-        ? planRouteBetweenPins(nodes, edges, startPin, destPin)
+        ? planRouteBetweenPins(allNodes, allEdges, startPin, destPin)
         : null,
     [startPin, destPin],
   );
 
   const steps = useMemo(
-    () => (route ? buildDirections(route, nodes, edges) : []),
+    () => (route ? buildDirections(route, allNodes, allEdges) : []),
     [route],
   );
 
   const handleMapClick = (pin: MapPin) => {
+    const floorPin = { ...pin, floorId };
     if (pinMode === "start") {
-      setStartPin(pin);
+      setStartPin(floorPin);
       setPinMode("dest"); // automatically switch to dest after placing start
     } else if (pinMode === "dest") {
-      setDestPin(pin);
+      setDestPin(floorPin);
       setPinMode(null); // done
     }
+  };
+
+  const handleLocate = (target: MapSearchTarget | null) => {
+    if (target?.floorId) setFloorId(target.floorId);
+    setLocateTarget(target);
   };
 
   const clearAll = () => {
@@ -59,10 +64,10 @@ export default function App() {
       <aside>
         <section>
           <RoomSearch
-            rooms={rooms}
-            nodes={nodes}
+            rooms={allRooms}
+            nodes={allNodes}
             target={locateTarget}
-            onLocate={setLocateTarget}
+            onLocate={handleLocate}
           />
         </section>
 
@@ -148,14 +153,17 @@ export default function App() {
 
       <main>
         <CampusMap
-          nodes={nodes}
-          edges={edges}
-          rooms={rooms}
+          floor={floorById[floorId]}
+          floors={floors}
+          nodes={allNodes}
+          edges={allEdges}
+          rooms={allRooms}
           route={route}
           startPin={startPin}
           destPin={destPin}
           pinMode={pinMode}
           locateTarget={locateTarget}
+          onFloorChange={setFloorId}
           onMapClick={handleMapClick}
         />
       </main>

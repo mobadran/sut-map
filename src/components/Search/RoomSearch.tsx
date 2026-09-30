@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { MapSearchTarget, NavNode, Room } from "../../types/map";
+import { floors } from "../../data/floors";
 
 type P = {
   rooms: Room[];
@@ -25,7 +26,8 @@ export default function RoomSearch({ rooms, nodes, target, onLocate }: P) {
         id: `room:${room.id}`,
         label: room.name,
         point: { x: room.x, y: room.y },
-        detail: count > 1 ? `Room · Entrance ${index}` : "Room",
+        floorId: room.floorId,
+        detail: `${floors.find((floor) => floor.id === room.floorId)?.label ?? "Map"}${count > 1 ? ` · Entrance ${index}` : " · Room"}`,
         searchText: room.name.toLowerCase(),
       };
     });
@@ -35,7 +37,8 @@ export default function RoomSearch({ rooms, nodes, target, onLocate }: P) {
         id: `node:${node.id}`,
         label: `${kind} · ${node.id}`,
         point: node.position,
-        detail: kind,
+        floorId: node.floorId,
+        detail: `${floors.find((floor) => floor.id === node.floorId)?.label ?? "Map"} · ${kind}`,
         searchText: `${kind} ${node.type} ${node.id}`.toLowerCase(),
       };
     });
