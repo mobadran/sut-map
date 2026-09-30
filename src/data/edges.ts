@@ -33,7 +33,6 @@ export const initialEdges: Edge[] = [
   E(19, "n19", "n9"),
   E(20, "n4", "n15"),
   E(21, "n9", "n17"),
-  E(22, "n19", "n16"),
   G(23, "n8", "n20", true), // east wing gate (open)
   E(24, "n20", "n21"),
 ];

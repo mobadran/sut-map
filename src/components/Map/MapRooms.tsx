@@ -8,11 +8,17 @@ type P = {
   onSelect: (name: string) => void;
 };
 
-export default function MapRooms({ rooms, startRoomName, selectedName, onSelect }: P) {
+export default function MapRooms({
+  rooms,
+  startRoomName,
+  selectedName,
+  onSelect,
+}: P) {
   return (
     <g>
       {rooms.map((r) => {
-        const x = r.x * W, y = r.y * H;
+        const x = r.x * W,
+          y = r.y * H;
         const isStart = r.name.toLowerCase() === startRoomName?.toLowerCase();
         const isDest = r.name.toLowerCase() === selectedName?.toLowerCase();
 
@@ -31,9 +37,30 @@ export default function MapRooms({ rooms, startRoomName, selectedName, onSelect 
         }
 
         return (
-          <g key={r.id} style={{ cursor: "pointer" }} onPointerDown={(e) => e.stopPropagation()} onClick={() => onSelect(r.name)}>
-            <rect x={x - 34} y={y - 14} width={68} height={28} rx={8} fill={fill} stroke={stroke} strokeWidth={2.5} />
-            <text x={x} y={y + 6} textAnchor="middle" fontSize={15} fontWeight={700} fill={textColor}>
+          <g
+            key={r.id}
+            style={{ cursor: "pointer" }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onSelect(r.name)}
+          >
+            <rect
+              x={x - 34}
+              y={y - 14}
+              width={68}
+              height={28}
+              rx={8}
+              fill={fill}
+              stroke={stroke}
+              strokeWidth={2.5}
+            />
+            <text
+              x={x}
+              y={y + 6}
+              textAnchor="middle"
+              fontSize={15}
+              fontWeight={700}
+              fill={textColor}
+            >
               {r.name}
             </text>
           </g>

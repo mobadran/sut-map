@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Edge, NavNode, Room, Route } from "../../types/map";
+import type { Edge, MapPin, MapSearchTarget, NavNode, Room, Route } from "../../types/map";
 import MapEdges from "./MapEdges";
 import MapNodes from "./MapNodes";
 import MapRooms from "./MapRooms";
 import RouteOverlay from "./RouteOverlay";
 import MapControls from "../Controls/MapControls";
+import { distance } from "../../routing/geometry";
 
 /** SVG user space. W/H must equal ASPECT (1.6) so normalized coords map without distortion. */
 export const W = 1600,
@@ -17,19 +18,24 @@ const found = import.meta.glob("../../assets/SUTMap.png", {
 }) as Record<string, string>;
 const mapUrl = Object.values(found)[0];
 
+/** Threshold in normalized units: if click is within this distance to a node, snap to it. */
+const SNAP_THRESHOLD = 0.045;
+
 type P = {
   nodes: NavNode[];
   edges: Edge[];
   rooms: Room[];
   route: Route | null;
-  startRoomName: string | null;
-  selectedName: string | null;
-  onSelectRoom: (name: string) => void;
+  startPin: MapPin | null;
+  destPin: MapPin | null;
+  pinMode: "start" | "dest" | null;
+  locateTarget: MapSearchTarget | null;
+  onMapClick: (pin: MapPin) => void;
 };
 
 export default function CampusMap(p: P) {
   const box = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; y: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [v, setV] = useState({ s: 1, x: 0, y: 0 });
 
   const fit = useCallback(() => {
@@ -73,25 +79,89 @@ export default function CampusMap(p: P) {
     };
   }, [fit, zoomAt]);
 
+  useEffect(() => {
+    if (!p.locateTarget || !box.current) return;
+    const { width, height } = box.current.getBoundingClientRect();
+    setV((current) => {
+      const s = Math.max(current.s, Math.min(1.6, current.s * 1.25));
+      return {
+        s,
+        x: width / 2 - p.locateTarget!.point.x * W * s,
+        y: height / 2 - p.locateTarget!.point.y * H * s,
+      };
+    });
+  }, [p.locateTarget]);
+
+  /** Convert a pointer event position to normalized map coordinates. */
+  const toNorm = (clientX: number, clientY: number) => {
+    const r = box.current!.getBoundingClientRect();
+    return {
+      x: (clientX - r.left - v.x) / (W * v.s),
+      y: (clientY - r.top - v.y) / (H * v.s),
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    drag.current = { x: e.clientX, y: e.clientY, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.hypot(dx, dy) > 4) d.moved = true;
+    setV((c) => ({
+      ...c,
+      x: c.x + e.clientX - d.x,
+      y: c.y + e.clientY - d.y,
+    }));
+    drag.current = { x: e.clientX, y: e.clientY, moved: d.moved };
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    // Only treat as a click if the pointer didn't move significantly AND we have a pin mode
+    if (!d || d.moved || !p.pinMode) return;
+
+    const pt = toNorm(e.clientX, e.clientY);
+
+    // Snap to closest node if within threshold
+    let bestNode: NavNode | null = null;
+    let bestNodeDist = SNAP_THRESHOLD;
+    for (const n of p.nodes) {
+      const d = distance(pt, n.position);
+      if (d < bestNodeDist) { bestNodeDist = d; bestNode = n; }
+    }
+
+    // Also check rooms — prefer them over raw nodes when close
+    let bestRoom: Room | null = null;
+    let bestRoomDist = SNAP_THRESHOLD;
+    for (const r of p.rooms) {
+      const d = distance(pt, { x: r.x, y: r.y });
+      if (d < bestRoomDist) { bestRoomDist = d; bestRoom = r; }
+    }
+
+    if (bestRoom && bestRoomDist <= bestNodeDist) {
+      p.onMapClick({ point: { x: bestRoom.x, y: bestRoom.y }, roomName: bestRoom.name, label: bestRoom.name });
+    } else if (bestNode) {
+      p.onMapClick({ point: bestNode.position, nodeId: bestNode.id, label: `Node ${bestNode.id} (${bestNode.type})` });
+    } else {
+      p.onMapClick({ point: pt, label: "Custom point" });
+    }
+  };
+
+  const startNodeId = p.startPin?.nodeId;
+  const destNodeId = p.destPin?.nodeId;
+
   return (
     <div
-      className="mapbox"
+      className={`mapbox${p.pinMode ? ` pin-mode-${p.pinMode}` : ""}`}
       ref={box}
-      onPointerDown={(e) => {
-        drag.current = { x: e.clientX, y: e.clientY };
-        e.currentTarget.setPointerCapture(e.pointerId);
-      }}
-      onPointerMove={(e) => {
-        const d = drag.current;
-        if (!d) return;
-        setV((c) => ({
-          ...c,
-          x: c.x + e.clientX - d.x,
-          y: c.y + e.clientY - d.y,
-        }));
-        drag.current = { x: e.clientX, y: e.clientY };
-      }}
-      onPointerUp={() => (drag.current = null)}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
     >
       <div
         style={{
@@ -120,13 +190,58 @@ export default function CampusMap(p: P) {
           )}
           <MapEdges edges={p.edges} nodes={p.nodes} />
           <RouteOverlay route={p.route} nodes={p.nodes} />
-          <MapNodes nodes={p.nodes} />
+          {/* Free-floating pins (not snapped to a node or room) */}
+          {p.startPin && !p.startPin.nodeId && !p.startPin.roomName && (
+            <FreePinMarker point={p.startPin.point} color="#10b981" label="START" />
+          )}
+          {p.destPin && !p.destPin.nodeId && !p.destPin.roomName && (
+            <FreePinMarker point={p.destPin.point} color="#f97316" label="DEST" />
+          )}
+          <MapNodes
+            nodes={p.nodes}
+            startNodeId={startNodeId}
+            destNodeId={destNodeId}
+            onNodeClick={(nodeId) => {
+              if (!p.pinMode) return;
+              const n = p.nodes.find((x) => x.id === nodeId)!;
+              p.onMapClick({ point: n.position, nodeId, label: `Node ${nodeId} (${n.type})` });
+            }}
+          />
           <MapRooms
             rooms={p.rooms}
-            startRoomName={p.startRoomName}
-            selectedName={p.selectedName}
-            onSelect={p.onSelectRoom}
+            startRoomName={p.startPin?.roomName ?? null}
+            selectedName={p.destPin?.roomName ?? null}
+            onSelect={(name) => {
+              if (!p.pinMode) return;
+              const room = p.rooms.find((r) => r.name === name)!;
+              p.onMapClick({ point: { x: room.x, y: room.y }, roomName: room.name, label: room.name });
+            }}
           />
+          {p.locateTarget && (
+            <g pointerEvents="none">
+              <circle
+                cx={p.locateTarget.point.x * W}
+                cy={p.locateTarget.point.y * H}
+                r={38}
+                fill="#e11d48"
+                opacity={0.2}
+                className="pulse"
+              />
+              <text
+                x={p.locateTarget.point.x * W}
+                y={p.locateTarget.point.y * H - 34}
+                textAnchor="middle"
+                fontSize={18}
+                fontWeight={800}
+                fill="#be123c"
+                stroke="#fff"
+                strokeWidth={5}
+                paintOrder="stroke"
+              >
+                {p.locateTarget.label}
+              </text>
+            </g>
+          )}
         </svg>
       </div>
       <MapControls
@@ -134,10 +249,27 @@ export default function CampusMap(p: P) {
         onZoomOut={() => zoomCenter(1 / 1.3)}
         onReset={fit}
       />
-      {!mapUrl && (
-        <div className="hint">Placeholder map — add src/assets/SUTMap.png</div>
+      {p.pinMode && (
+        <div className={`pin-hint pin-hint-${p.pinMode}`}>
+          {p.pinMode === "start"
+            ? "🚩 Click on the map to set your START point"
+            : "📍 Click on the map to set your DESTINATION"}
+        </div>
       )}
     </div>
+  );
+}
+
+function FreePinMarker({ point, color, label }: { point: { x: number; y: number }; color: string; label: string }) {
+  const x = point.x * W, y = point.y * H;
+  return (
+    <g pointerEvents="none">
+      <circle cx={x} cy={y} r={22} fill={color} opacity={0.25} className="pulse" />
+      <circle cx={x} cy={y} r={10} fill={color} stroke="#fff" strokeWidth={3} />
+      <text x={x} y={y - 18} textAnchor="middle" fontSize={12} fontWeight={700} fill={color}>
+        {label}
+      </text>
+    </g>
   );
 }
 

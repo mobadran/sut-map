@@ -1,4 +1,4 @@
-import type { Edge, NavNode, Point, Room, Route } from "../types/map";
+import type { Edge, MapPin, NavNode, Point, Route } from "../types/map";
 import { closestPointOnSegment, distance } from "./geometry";
 
 export const isActive = (e: Edge) => !e.isGate || e.isOpen === true;
@@ -104,61 +104,31 @@ export function findRouteBetweenPoints(
   return null;
 }
 
-/** Tries every entrance pair between start room and destination room; returns shortest valid route. */
-export function planRoute(
+/**
+ * Routes between two MapPins. Each pin is either snapped to a node or a
+ * free point on an edge. Returns a Route or null if no path exists.
+ */
+export function planRouteBetweenPins(
   nodes: NavNode[],
   edges: Edge[],
-  rooms: Room[],
-  startRoomName: string,
-  destRoomName: string
+  startPin: MapPin,
+  destPin: MapPin
 ): Route | null {
-  if (!startRoomName || !destRoomName) return null;
+  const sEdge = closestActiveEdge(startPin.point, nodes, edges);
+  const dEdge = closestActiveEdge(destPin.point, nodes, edges);
+  if (!sEdge || !dEdge) return null;
 
-  const startRooms = rooms.filter((r) => r.name.toLowerCase() === startRoomName.toLowerCase());
-  const destRooms = rooms.filter((r) => r.name.toLowerCase() === destRoomName.toLowerCase());
+  const sPt = closestPointOnEdge(startPin.point, sEdge, nodes);
+  const dPt = closestPointOnEdge(destPin.point, dEdge, nodes);
 
-  if (!startRooms.length || !destRooms.length) return null;
+  const res = findRouteBetweenPoints(nodes, edges, sEdge, sPt, dEdge, dPt);
+  if (!res) return null;
 
-  if (startRoomName.toLowerCase() === destRoomName.toLowerCase()) {
-    const sRoom = startRooms[0];
-    const sEdge = sRoom.entranceEdgeId ? edges.find((e) => e.id === sRoom.entranceEdgeId) : closestActiveEdge(sRoom, nodes, edges);
-    const entrancePt = sEdge ? closestPointOnEdge(sRoom, sEdge, nodes) : { x: sRoom.x, y: sRoom.y };
-    return {
-      startRoom: sRoom,
-      room: sRoom,
-      nodeIds: [],
-      edgeIds: [],
-      points: [entrancePt],
-      startEntrance: entrancePt,
-      entrance: entrancePt,
-      length: 0,
-    };
-  }
-
-  let best: Route | null = null;
-
-  for (const sRoom of startRooms) {
-    const sEdge = sRoom.entranceEdgeId ? edges.find((e) => e.id === sRoom.entranceEdgeId) : closestActiveEdge(sRoom, nodes, edges);
-    if (!sEdge || !isActive(sEdge)) continue;
-    const sPt = closestPointOnEdge(sRoom, sEdge, nodes);
-
-    for (const dRoom of destRooms) {
-      const dEdge = dRoom.entranceEdgeId ? edges.find((e) => e.id === dRoom.entranceEdgeId) : closestActiveEdge(dRoom, nodes, edges);
-      if (!dEdge || !isActive(dEdge)) continue;
-      const dPt = closestPointOnEdge(dRoom, dEdge, nodes);
-
-      const res = findRouteBetweenPoints(nodes, edges, sEdge, sPt, dEdge, dPt);
-      if (res && (!best || res.length < best.length)) {
-        best = {
-          startRoom: sRoom,
-          room: dRoom,
-          startEntrance: sPt,
-          entrance: dPt,
-          ...res,
-        };
-      }
-    }
-  }
-
-  return best;
+  return {
+    startPin,
+    destPin,
+    startEntrance: sPt,
+    entrance: dPt,
+    ...res,
+  };
 }

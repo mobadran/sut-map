@@ -17,7 +17,6 @@ export const nodes: NavNode[] = [
   n("n13", "intersection", 0.5, 0.25),
   n("n14", "intersection", 0.5, 0.5),
   n("n15", "stairs", 0.07, 0.5),
-  n("n16", "elevator", 0.7, 0.6),
   n("n17", "stairs", 0.93, 0.5),
   n("n18", "intersection", 0.3, 0.5),
   n("n19", "intersection", 0.7, 0.5),

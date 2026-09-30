@@ -1,40 +1,65 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CampusMap from "./components/Map/CampusMap";
 import { NODE_STYLE, NodeShape } from "./components/Map/MapNodes";
-import RoomSearch from "./components/Search/RoomSearch";
 import NavigationInstructions from "./components/Navigation/NavigationInstructions";
+import RoomSearch from "./components/Search/RoomSearch";
 import { nodes } from "./data/nodes";
 import { initialEdges as edges } from "./data/edges";
 import { rooms } from "./data/rooms";
-import { planRoute } from "./routing/aStar";
+import { planRouteBetweenPins } from "./routing/aStar";
 import { buildDirections } from "./routing/directions";
-import type { NodeType } from "./types/map";
+import type { MapPin, MapSearchTarget, NodeType } from "./types/map";
+
+type PinMode = "start" | "dest" | null;
 
 export default function App() {
-  const [startRoom, setStartRoom] = useState<string | null>("A001");
-  const [destRoom, setDestRoom] = useState<string | null>("A020");
+  const [startPin, setStartPin] = useState<MapPin | null>(null);
+  const [destPin, setDestPin] = useState<MapPin | null>(null);
+  const [pinMode, setPinMode] = useState<PinMode>("start");
+  const [locateTarget, setLocateTarget] = useState<MapSearchTarget | null>(null);
 
-  const uniqueRooms = useMemo(
-    () => Array.from(new Set(rooms.map((r) => r.name))).sort(),
-    [],
-  );
+  useEffect(() => {
+    if (!locateTarget) return;
+    const timeoutId = window.setTimeout(() => setLocateTarget(null), 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [locateTarget]);
 
   const route = useMemo(
     () =>
-      startRoom && destRoom
-        ? planRoute(nodes, edges, rooms, startRoom, destRoom)
+      startPin && destPin
+        ? planRouteBetweenPins(nodes, edges, startPin, destPin)
         : null,
-    [startRoom, destRoom],
+    [startPin, destPin],
   );
 
   const steps = useMemo(
-    () => (route ? buildDirections(route, nodes) : []),
+    () => (route ? buildDirections(route, nodes, edges) : []),
     [route],
   );
 
-  const handleRoomClickOnMap = (name: string) => {
-    if (name === startRoom) return;
-    setDestRoom(name);
+  const handleMapClick = (pin: MapPin) => {
+    if (pinMode === "start") {
+      setStartPin(pin);
+      setPinMode("dest"); // automatically switch to dest after placing start
+    } else if (pinMode === "dest") {
+      setDestPin(pin);
+      setPinMode(null); // done
+    }
+  };
+
+  const clearStart = () => {
+    setStartPin(null);
+    setPinMode("start");
+  };
+  const clearDest = () => {
+    setDestPin(null);
+    if (startPin) setPinMode("dest");
+    else setPinMode("start");
+  };
+  const clearAll = () => {
+    setStartPin(null);
+    setDestPin(null);
+    setPinMode("start");
   };
 
   return (
@@ -43,81 +68,85 @@ export default function App() {
         <h1>🧭 SUT Navigator</h1>
 
         <section>
-          <h3>Start Room</h3>
-          <div style={{ marginBottom: "8px" }}>
-            <select
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                fontSize: "14px",
-                fontWeight: 500,
-              }}
-              value={startRoom ?? ""}
-              onChange={(e) => setStartRoom(e.target.value || null)}
-            >
-              <option value="">-- Select Start Room --</option>
-              {uniqueRooms.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <h3>Find a place</h3>
           <RoomSearch
             rooms={rooms}
-            selectedName={startRoom}
-            onSelect={setStartRoom}
-            placeholder="Search start room…"
+            nodes={nodes}
+            target={locateTarget}
+            onLocate={setLocateTarget}
           />
         </section>
 
         <section>
-          <h3>Destination Room</h3>
-          <div style={{ marginBottom: "8px" }}>
-            <select
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                border: "1px solid #cbd5e1",
-                fontSize: "14px",
-                fontWeight: 500,
-              }}
-              value={destRoom ?? ""}
-              onChange={(e) => setDestRoom(e.target.value || null)}
+          <h3>Start Point</h3>
+          <div className="pin-panel">
+            <button
+              className={`pin-btn start${pinMode === "start" ? " active" : ""}`}
+              onClick={() => setPinMode(pinMode === "start" ? null : "start")}
             >
-              <option value="">-- Select Destination Room --</option>
-              {uniqueRooms.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
+              {pinMode === "start" ? "🎯 Picking start…" : "🚩 Set Start"}
+            </button>
+            {startPin && (
+              <div className="pin-info">
+                <span>{startPin.label ?? "Custom point"}</span>
+                <button
+                  className="link"
+                  onClick={clearStart}
+                  title="Clear start"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
-          <RoomSearch
-            rooms={rooms}
-            selectedName={destRoom}
-            onSelect={setDestRoom}
-            placeholder="Search destination room…"
-          />
         </section>
+
+        <section>
+          <h3>Destination</h3>
+          <div className="pin-panel">
+            <button
+              className={`pin-btn dest${pinMode === "dest" ? " active" : ""}`}
+              onClick={() => setPinMode(pinMode === "dest" ? null : "dest")}
+            >
+              {pinMode === "dest"
+                ? "🎯 Picking destination…"
+                : "📍 Set Destination"}
+            </button>
+            {destPin && (
+              <div className="pin-info">
+                <span>{destPin.label ?? "Custom point"}</span>
+                <button
+                  className="link"
+                  onClick={clearDest}
+                  title="Clear destination"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {(startPin || destPin) && (
+          <button className="clear-btn" onClick={clearAll}>
+            🗑 Clear all pins
+          </button>
+        )}
 
         <section>
           <h3>Directions</h3>
           <NavigationInstructions
             route={route}
             steps={steps}
-            startRoomName={startRoom}
-            roomName={destRoom}
+            startPin={startPin}
+            destPin={destPin}
           />
         </section>
 
         <section>
           <h3>Legend</h3>
           <div className="legend">
-            {(["entrance", "stairs", "elevator"] as NodeType[]).map((t) => (
+            {(["entrance", "stairs"] as NodeType[]).map((t) => (
               <span key={t}>
                 <svg width="28" height="28" viewBox="0 0 28 28">
                   <NodeShape type={t} x={14} y={14} r={0.8} />
@@ -151,9 +180,11 @@ export default function App() {
           edges={edges}
           rooms={rooms}
           route={route}
-          startRoomName={startRoom}
-          selectedName={destRoom}
-          onSelectRoom={handleRoomClickOnMap}
+          startPin={startPin}
+          destPin={destPin}
+          pinMode={pinMode}
+          locateTarget={locateTarget}
+          onMapClick={handleMapClick}
         />
       </main>
     </div>

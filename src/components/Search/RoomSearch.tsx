@@ -1,57 +1,82 @@
 import { useMemo, useState } from "react";
-import type { Room } from "../../types/map";
+import type { MapSearchTarget, NavNode, Room } from "../../types/map";
 
 type P = {
   rooms: Room[];
-  selectedName: string | null;
-  onSelect: (name: string | null) => void;
-  placeholder?: string;
+  nodes: NavNode[];
+  target: MapSearchTarget | null;
+  onLocate: (target: MapSearchTarget | null) => void;
 };
 
-export default function RoomSearch({ rooms, selectedName, onSelect, placeholder = "Search room (e.g. A020)…" }: P) {
+type SearchItem = MapSearchTarget & { detail: string; searchText: string };
+
+export default function RoomSearch({ rooms, nodes, target, onLocate }: P) {
   const [q, setQ] = useState("");
+
+  const items = useMemo(() => {
+    const roomGroups = new Map<string, Room[]>();
+    rooms.forEach((room) => {
+      const group = roomGroups.get(room.name) ?? [];
+      group.push(room);
+      roomGroups.set(room.name, group);
+    });
+
+    const roomItems: SearchItem[] = [...roomGroups].map(([name, group]) => ({
+      id: `room:${name}`,
+      label: name,
+      point: {
+        x: group.reduce((sum, room) => sum + room.x, 0) / group.length,
+        y: group.reduce((sum, room) => sum + room.y, 0) / group.length,
+      },
+      detail: group.length > 1 ? `Room · ${group.length} map locations` : "Room",
+      searchText: name.toLowerCase(),
+    }));
+    const nodeItems: SearchItem[] = nodes.map((node) => {
+      const kind = node.type === "stairs" ? "Staircase" : node.type;
+      return {
+        id: `node:${node.id}`,
+        label: `${kind} · ${node.id}`,
+        point: node.position,
+        detail: kind,
+        searchText: `${kind} ${node.type} ${node.id}`.toLowerCase(),
+      };
+    });
+    return [...roomItems, ...nodeItems];
+  }, [nodes, rooms]);
 
   const matches = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return [];
-    const m = new Map<string, number>();
-    rooms.filter((r) => r.name.toLowerCase().includes(t)).forEach((r) => m.set(r.name, (m.get(r.name) ?? 0) + 1));
-    return [...m];
-  }, [q, rooms]);
+    return items.filter((item) => item.searchText.includes(t));
+  }, [items, q]);
+
+  const locate = (item: SearchItem) => {
+    setQ("");
+    onLocate({ ...item, point: { ...item.point } });
+  };
 
   return (
     <div>
       <input
         className="search"
-        placeholder={placeholder}
+        placeholder="Search rooms, stairs, entrances…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && matches[0]) {
-            onSelect(matches[0][0]);
-            setQ("");
-          }
+          if (e.key === "Enter" && matches[0]) locate(matches[0]);
         }}
       />
-      {matches.map(([name, n]) => (
+      {matches.map((item) => (
         <button
-          key={name}
-          className={"result" + (name === selectedName ? " on" : "")}
-          onClick={() => {
-            onSelect(name);
-            setQ("");
-          }}
+          key={item.id}
+          className={"result" + (item.id === target?.id ? " on" : "")}
+          onClick={() => locate(item)}
         >
-          <b>{name}</b>
-          <span>{n > 1 ? `${n} entrances · best is chosen automatically` : "1 entrance"}</span>
+          <b>{item.label}</b>
+          <span>{item.detail}</span>
         </button>
       ))}
-      {q && !matches.length && <p className="muted">No rooms match “{q}”.</p>}
-      {selectedName && (
-        <button className="link" onClick={() => onSelect(null)}>
-          Clear ({selectedName})
-        </button>
-      )}
+      {q && !matches.length && <p className="muted">No places match “{q}”.</p>}
     </div>
   );
 }
