@@ -305,7 +305,7 @@ export default function CampusMap(p: P) {
             <Placeholder nodes={floorNodes} edges={floorEdges} />
           )}
           <rect width={W} height={H} fill={p.floor.primaryColor} opacity={0.09} pointerEvents="none" />
-          <MapEdges edges={floorEdges} nodes={floorNodes} primaryColor={p.floor.primaryColor} />
+          <MapEdges edges={floorEdges} nodes={floorNodes} primaryColor="gray" />
           <RouteOverlay
             route={p.route}
             nodes={p.nodes}
